@@ -27,7 +27,7 @@ import threading
 from gazebo_msgs.msg import ModelStates
 from gazebo_msgs.msg import ModelState 
 
-from gazebo_msgs.srv import SetModelState
+from gazebo_msgs.srv import SetModelState, GetModelState
 from sensor_msgs.msg import LaserScan
 #from kobuki_msgs.msg import BumperEvent
 import time
@@ -69,32 +69,37 @@ class InfoGetter(object):
 
 class GameState:
 
-    def __init__(self):
-        self.talker_node = rospy.init_node('talker', anonymous=True)
+    def __init__(self, node, x, y, z, robot=""):
+        self.robot = robot
+        # self.nodename = self.robot[1:] + '_talker' if self.robot != "" else 'talker'
+        # self.talker_node = rospy.init_node(self.nodename, anonymous=True)
+        self.talker_node = node
         self.pose_ig = InfoGetter()
         self.laser_ig = InfoGetter()
         self.collision_ig = InfoGetter()
-        
+        self.x = x
+        self.y = y
+        self.z = z
 
-        self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        self.pub = rospy.Publisher(self.robot + '/cmd_vel', Twist, queue_size=1)
         self.position = Point()
         self.move_cmd = Twist()
 
         self.pose_info = rospy.Subscriber("/gazebo/model_states", ModelStates, self.pose_ig)
-        self.laser_info = rospy.Subscriber("/laserscan_filtered", LaserScan, self.laser_ig)
+        self.laser_info = rospy.Subscriber(self.robot + "/laserscan_filtered", LaserScan, self.laser_ig)
         # self.bumper_info = rospy.Subscriber("/mobile_base/events/bumper", BumperEvent, self.processBump)
 
 
         # tf
         self.tf_listener = tf.TransformListener()
-        self.odom_frame = 'odom'
+        self.odom_frame = self.robot + '_tf/odom' if self.robot != "" else 'odom'
         try:
-            self.tf_listener.waitForTransform(self.odom_frame, 'base_footprint', rospy.Time(), rospy.Duration(1.0))
-            self.base_frame = 'base_footprint'
+            self.tf_listener.waitForTransform(self.odom_frame, self.robot + '_tf/base_footprint' if self.robot != "" else 'base_footprint', rospy.Time(), rospy.Duration(1.0))
+            self.base_frame = self.robot + '_tf/base_footprint' if self.robot != "" else 'base_footprint'
         except (tf.Exception, tf.ConnectivityException, tf.LookupException):
             try:
-                self.tf_listener.waitForTransform(self.odom_frame, 'base_link', rospy.Time(), rospy.Duration(1.0))
-                self.base_frame = 'base_link'
+                self.tf_listener.waitForTransform(self.odom_frame, self.robot + '_tf/base_link' if self.robot != "" else 'base_link', rospy.Time(), rospy.Duration(1.0))
+                self.base_frame = self.robot + '_tf/base_link' if self.robot != "" else 'base_link'
             except (tf.Exception, tf.ConnectivityException, tf.LookupException):
                 rospy.loginfo("Cannot find transform between odom and base_link or base_footprint")
                 rospy.signal_shutdown("tf Exception")
@@ -174,17 +179,17 @@ class GameState:
         self.crash_indicator = 0
 
         state_msg = ModelState()    
-        state_msg.model_name = 'turtlebot3_waffle_pi'
-        state_msg.pose.position.x = 0.0
-        state_msg.pose.position.y = 0.0 #random_turtlebot_y
-        state_msg.pose.position.z = 0.0
+        state_msg.model_name = 'turtlebot3_waffle_pi' if self.robot == "" else self.robot[1:]
+        state_msg.pose.position.x = self.x
+        state_msg.pose.position.y = self.y #random_turtlebot_y
+        state_msg.pose.position.z = self.z
         state_msg.pose.orientation.x = 0
         state_msg.pose.orientation.y = 0
         state_msg.pose.orientation.z = -0.2
         state_msg.pose.orientation.w = 0
 
         state_target_msg = ModelState()    
-        state_target_msg.model_name = 'unit_sphere_0_0' #'unit_sphere_0_0' #'unit_box_1' #'cube_20k_0'
+        state_target_msg.model_name = 'unit_sphere_0_0'# + self.robot[1:] #'unit_sphere_0_0' #'unit_box_1' #'cube_20k_0'
         state_target_msg.pose.position.x = self.target_x
         state_target_msg.pose.position.y = self.target_y
         state_target_msg.pose.position.z = 0.0
@@ -264,6 +269,15 @@ class GameState:
             self.rate.sleep()
             record_time = time.time()
             record_time_step = record_time - start_time
+
+        rospy.wait_for_service('/gazebo/get_model_state')
+        try:
+            get_state = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+            resp_target = get_state('unit_sphere_0_0', '')
+            self.target_x = resp_target.pose.position.x
+            self.target_y = resp_target.pose.position.y
+        except rospy.ServiceException as e:
+            print ("Service call failed: {}".format(e))
 
         (self.position, self.rotation) = self.get_odom()
         turtlebot_x = self.position.x

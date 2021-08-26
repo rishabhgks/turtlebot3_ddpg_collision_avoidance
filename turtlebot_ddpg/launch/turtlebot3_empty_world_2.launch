@@ -1,0 +1,52 @@
+<launch>
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="x_pos" default="0.0"/>
+  <arg name="y_pos" default="0.0"/>
+  <arg name="z_pos" default="0.0"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+    <arg name="world_name" value="$(arg world_file)"/>
+  </include>
+
+  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" type="double" value="30.0" />
+  </node>
+
+  <!-- BEGIN ROBOT 1-->
+  <group ns="robot1">
+    <param name="tf_prefix" value="robot1_tf" />
+    <include file="$(find turtlebot_ddpg)/launch/one_robot.launch" >
+      <arg name="init_pose" value="-x 1 -y 1 -z 0" />
+      <arg name="robot_name"  value="robot1" />
+    </include>
+  </group>
+ 
+  <!-- BEGIN ROBOT 2-->
+  <group ns="robot2">
+    <param name="tf_prefix" value="robot2_tf" />
+    <include file="$(find turtlebot_ddpg)/launch/one_robot.launch" >
+      <arg name="init_pose" value="-x -1 -y 3 -z 0" />
+      <arg name="robot_name"  value="robot2" />
+    </include>
+  </group>
+
+  <node pkg="laser_filters" type="scan_to_scan_filter_chain" name="laser_filter1">
+      <rosparam command="load" file="$(find laser_filters)/turtlebot3_range_filter.yaml" />
+      <remap from="/scan_filtered" to="/robot1/laserscan_filtered" />
+      <remap from="/scan" to="/robot1/scan" />
+  </node>
+
+  <node pkg="laser_filters" type="scan_to_scan_filter_chain" name="laser_filter2">
+      <rosparam command="load" file="$(find laser_filters)/turtlebot3_range_filter.yaml" />
+      <remap from="/scan_filtered" to="/robot2/laserscan_filtered" />
+      <remap from="/scan" to="/robot2/scan" />
+  </node>
+
+</launch>
