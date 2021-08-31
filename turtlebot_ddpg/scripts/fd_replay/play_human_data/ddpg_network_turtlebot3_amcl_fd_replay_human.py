@@ -20,6 +20,9 @@ import time
 import matplotlib.pyplot as plt
 import scipy.io as sio
 from priortized_replay_buffer import PrioritizedReplayBuffer
+import os
+tim = time.time()
+os.mkdir('ddpg_per_' + str(tim))
 
 
 def batch_stack_samples(samples):
@@ -73,14 +76,14 @@ class ActorCritic:
 		self.actor_state_input, self.actor_model = self.create_actor_model()
 		_, self.target_actor_model = self.create_actor_model()
 
-		self.actor_critic_grad = tf.placeholder(tf.float32,
+		self.actor_critic_grad = tf.compat.v1.placeholder(tf.float32,
 			[None, self.env.action_space.shape[0]]) # where we will feed de/dC (from critic)
 
 		actor_model_weights = self.actor_model.trainable_weights
 		self.actor_grads = tf.gradients(self.actor_model.output,
 			actor_model_weights, -self.actor_critic_grad) # dC/dA (from actor)
 		grads = zip(self.actor_grads, actor_model_weights)
-		self.optimize = tf.train.AdamOptimizer(self.learning_rate).apply_gradients(grads)
+		self.optimize = tf.compat.v1.train.AdamOptimizer(self.learning_rate).apply_gradients(grads)
 
 		# ===================================================================== #
 		#                              Critic Model                             #
@@ -320,24 +323,25 @@ class ActorCritic:
 	# ========================================================================= #
 
 	def save_weight(self, num_trials, trial_len):
-		self.actor_model.save_weights('actormodel' + '-' +  str(num_trials) + '-' + str(trial_len) + '.h5', overwrite=True)
-		self.critic_model.save_weights('criticmodel' + '-' + str(num_trials) + '-' + str(trial_len) + '.h5', overwrite=True)#("criticmodel.h5", overwrite=True)
+		global tim
+		self.actor_model.save_weights('ddpg_per_' + str(tim) + '/actormodel' + '-' +  str(num_trials) + '-' + str(trial_len) + '.h5', overwrite=True)
+		self.critic_model.save_weights('ddpg_per_' + str(tim) + '/criticmodel' + '-' + str(num_trials) + '-' + str(trial_len) + '.h5', overwrite=True)#("criticmodel.h5", overwrite=True)
 
 	def play(self, cur_state):
 		return self.actor_model.predict(cur_state)
 
 
 def main():
-	
+	global tim
 	sess = tf.Session()
 	K.set_session(sess)
-
+	log_time = time.time()
 	########################################################
 	game_state= ddpg_turtlebot_turtlebot3_amcl_fd_replay_human.GameState()   # game_state has frame_step(action) function
 	actor_critic = ActorCritic(game_state, sess)
 	########################################################
-	num_trials = 10000
-	trial_len  = 500
+	num_trials = 501
+	trial_len  = 2000
 	train_indicator = 0
 
 	current_state = game_state.reset()
@@ -376,9 +380,10 @@ def main():
 	
 
 	if (train_indicator==1):
-
-		# actor_critic.actor_model.load_weights("actormodel-90-1000.h5")
-		# actor_critic.critic_model.load_weights("criticmodel-90-1000.h5")
+		step_reward = [0, 0, 0, 0]
+		train_start_time = time.time()
+		actor_critic.actor_model.load_weights("actormodel-300-2000.h5")
+		actor_critic.critic_model.load_weights("criticmodel-300-2000.h5")
 		for i in range(num_trials):
 			print("trial:" + str(i))
 			#game_state.game_step(0.3, 0.2, 0.0)
@@ -407,14 +412,15 @@ def main():
 
 				step = step + 1
 				#plot_reward(step,reward,ax,fig)
-				step_reward = np.append(step_reward,[step,reward])
-				sio.savemat('step_reward.mat',{'data':step_reward},True,'5', False, False,'row')
+				# step_reward = np.append(step_reward,[step,reward])
+				step_reward = np.append(step_reward,[i+1, step,reward,end_time-train_start_time])
+				sio.savemat('ddpg_per_' + str(tim) + '/step_train_{}_reward.mat'.format(log_time),{'data':step_reward},True,'5', False, False,'row')
 				print("step is %s", step)
 
 				Q_values = actor_critic.read_Q_values(current_state, action)
 				step_Q = np.append(step_Q,[step,Q_values[0][0]])
 				print("Q_values is %s", Q_values[0][0])
-				sio.savemat('step_Q.mat',{'data':step_Q},True,'5', False, False,'row')
+				sio.savemat('ddpg_per_' + str(tim) + '/step_Q.mat',{'data':step_Q},True,'5', False, False,'row')
 
 				start_time = time.time()
 
@@ -442,12 +448,14 @@ def main():
 		
 
 	if train_indicator==0:
+		train_start_time = time.time()
+		step_reward = [0, 0, 0, 0]
 		for i in range(num_trials):
 			print("trial:" + str(i))
 			current_state = game_state.reset()
 			
-			actor_critic.actor_model.load_weights("actormodel-450-500.h5")
-			actor_critic.critic_model.load_weights("criticmodel-450-500.h5")
+			actor_critic.actor_model.load_weights("actormodel-300-2000.h5")
+			actor_critic.critic_model.load_weights("criticmodel-300-2000.h5")
 			##############################################################################################
 			total_reward = 0
 			
@@ -465,6 +473,12 @@ def main():
 				reward, new_state, crashed_value = game_state.game_step(0.1, action[0][1], action[0][0]) # we get reward and state here, then we need to calculate if it is crashed! for 'dones' value
 				total_reward = total_reward + reward
 				###########################################################################################
+				step = step + 1
+				#plot_reward(step,reward,ax,fig)
+				# step_reward = np.append(step_reward,[step,reward,end_time - train_start_time])
+				step_reward = np.append(step_reward,[i+1, step,reward,end_time-train_start_time])
+				sio.savemat('step_debug_{}_reward.mat'.format(log_time),{'data':step_reward},True,'5', False, False,'row')
+				
 
 				if j == (trial_len - 1):
 					crashed_value = 1

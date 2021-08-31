@@ -159,13 +159,15 @@ class GameState:
         index_y = random.choice(index_list)
 
         # for maze
-        # self.target_x = (np.random.random()-0.5)*5 + 12*index_x
-        # self.target_y = (np.random.random()-0.5)*5 + 12*index_y
+        self.target_x = (np.random.random()-0.5)*5 + 12*index_x
+        self.target_y = (np.random.random()-0.5)*5 + 12*index_y
         #random_turtlebot_y = (np.random.random())*4 + index_turtlebot_y
 
         # for corridor
-        self.target_x = (np.random.random()-0.5)*5 + 12*index_x
-        self.target_y = (np.random.random()-0.5)*3
+        # self.target_x = (np.random.random()-0.5)*5 + 12*index_x
+        # self.target_y = (np.random.random()-0.5)*3
+        # self.target_x = 10.0
+        # self.target_y = 7.0
         random_turtlebot_y = (np.random.random())*5 #+ index_turtlebot_y
 
 

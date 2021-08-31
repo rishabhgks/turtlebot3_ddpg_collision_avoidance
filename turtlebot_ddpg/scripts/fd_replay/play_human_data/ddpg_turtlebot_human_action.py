@@ -112,7 +112,7 @@ class GameState:
         self.crash_indicator = 0
 
         # observation_space and action_space
-        self.state_num = 28 #685                 # when you change this value, remember to change the reset default function as well
+        self.state_num  = 28 #685                 # when you change this value, remember to change the reset default function as well
         self.action_num = 2
         self.observation_space = np.empty(self.state_num)
         self.action_space = np.empty(self.action_num)
