@@ -2,7 +2,7 @@
 
 # this network can change both heading and velocity
 
-import ddpg_turtlebot_turtlebot3_original_ddpg_2
+import ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi
 import numpy as np
 from keras.models import Sequential, Model
 from keras.layers import Dense, Dropout, Input, merge
@@ -21,10 +21,10 @@ import matplotlib.pyplot as plt
 import scipy.io as sio
 import rospy
 import rospkg
-# from priortized_replay_buffer import PrioritizedReplayBuffer
+from priortized_replay_buffer import PrioritizedReplayBuffer
 
 
-def stack_samples(samples):
+def batch_stack_samples(samples):
 	array = np.array(samples)
 	#before_current_states = np.stack(array[:,0])
 	current_states = np.stack(array[:,0]).reshape((array.shape[0],-1))
@@ -32,9 +32,13 @@ def stack_samples(samples):
 	rewards = np.stack(array[:,2]).reshape((array.shape[0],-1))
 	new_states = np.stack(array[:,3]).reshape((array.shape[0],-1))
 	dones = np.stack(array[:,4]).reshape((array.shape[0],-1))
+	weights = np.stack(array[:,5]).reshape((array.shape[0],-1))
+	indices = np.stack(array[:,6]).reshape((array.shape[0],-1))
+	eps_d = np.stack(array[:,7]).reshape((array.shape[0],-1))
 
 
-	return current_states, actions, rewards, new_states, dones #, weights, indices, eps_d
+
+	return current_states, actions, rewards, new_states, dones, weights, indices, eps_d
 	
 
 # determines how to assign values to each state, i.e. takes the state
@@ -67,7 +71,7 @@ class ActorCritic:
 		# Calculate de/dA as = de/dC * dC/dA, where e is error, C critic, A act #
 		# ===================================================================== #
 
-		self.memory = deque(maxlen=1000000)
+		self.memory = PrioritizedReplayBuffer() #deque(maxlen=40000)
 		self.actor_state_input, self.actor_model = self.create_actor_model()
 		_, self.target_actor_model = self.create_actor_model()
 
@@ -138,23 +142,73 @@ class ActorCritic:
 	# ========================================================================= #
 
 	def remember(self, cur_state, action, reward, new_state, done):
-		self.memory.append([cur_state, action, reward, new_state, done])
+		
+		indice = len(self.memory.memory_data())
 
+		target_actions = self.target_actor_model.predict(new_state)
+		future_rewards = self.target_critic_model.predict([new_state, target_actions])
+		rewards = reward + self.gamma* future_rewards * (1 - done)
+
+		# get critic_loss_element_wise and actor_loss_element
+		critic_values = self.critic_model.predict([cur_state, action])
+		critic_loss_element = np.power((critic_values-rewards), 2)
+		predicted_action = self.actor_model.predict(cur_state)
+		actor_loss_element = self.critic_model.predict([cur_state, predicted_action])
+
+		new_priorities  = critic_loss_element
+		new_priorities += self.hyper_parameters_lambda3 * np.power(actor_loss_element,2)
+		new_priorities += self.hyper_parameters_eps
+		# new_priorities += self.hyper_parameters_eps_d
+
+		self.memory.add(cur_state, action, reward, new_state, done, indice, new_priorities)  # add to buffer, instead of sampling batch
+
+
+
+	def read_human_data(self):
+		mat_contents = sio.loadmat('human_data.mat')
+		a = mat_contents['data']
+		
+		for i in range(self.demo_size):
+			cur_state = a[i][0:28]
+			action = a[i][28:30]
+			reward = a[i][30]
+			new_state = a[i][31:59]
+			done = a[i][59]
+			cur_state = cur_state.reshape(1,28)
+			action = action.reshape(1,2)
+			#array_reward = np.array(reward)
+			#reward = self.array_reward.reshape(1,1)
+			new_state = new_state.reshape(1,28)
+			indice = i
+			new_priorities = 1
+			action[0][1] = action[0][1]/0.26
+			# print("angular velocity recorded is %s", action[0][0])
+			# print("linear velocity recorded is %s", action[0][1])
+			self.memory.add(cur_state, action, reward, new_state, done, indice, new_priorities)
 
 
 	def _train_critic_actor(self, samples):
  
+   		# 1, sample to get states, actions, rewards, new_states, dones
+   		# 2, calculate weights, indices, eps_d
+   		# 3, get critic_loss_element_wise
+   		# 4, train critic based on weights
+   		# 5, train actor based on weights
+   		# 6, update target network?
+   		# 7, update priorities for sampling
+
 
    		# 1, sample
-		cur_states, actions, rewards, new_states, dones= stack_samples(samples)
+		cur_states, actions, rewards, new_states, dones, weights, indices, eps_d = samples #batch_stack_samples(samples)
 		target_actions = self.target_actor_model.predict(new_states)
 		future_rewards = self.target_critic_model.predict([new_states, target_actions])
 		rewards = rewards + self.gamma* future_rewards * (1 - dones)
 
-		# print("cur_states is %s", cur_states)
 
-		# evaluation = self.critic_model.fit([cur_states, actions], rewards, verbose=0, sample_weight=_sample_weight)
-		evaluation = self.critic_model.fit([cur_states, actions], rewards, verbose=0)
+		# 4, train critic based on weights
+		_sample_weight = weights #(rewards/rewards).flatten()
+		# print("_sample_weight is %s", _sample_weight)
+		evaluation = self.critic_model.fit([cur_states, actions], rewards, verbose=0, sample_weight=_sample_weight)
 		# print('\nhistory dict:', evaluation.history)
 
 
@@ -165,12 +219,40 @@ class ActorCritic:
 			self.critic_action_input: predicted_actions
 		})[0]
 
+
+
+		#calculate grads_weight for changing the actor model weight?
+		grads_weight = grads
+		for i in range(0, len(grads)):
+			grads_weight[i][0] = grads[i][0]*_sample_weight[i]
+			grads_weight[i][1] = grads[i][1]*_sample_weight[i]
+		grads = grads_weight
 		self.sess.run(self.optimize, feed_dict={
 			self.actor_state_input: cur_states,
 			self.actor_critic_grad: grads
 		})
 		# print("grads*weights is %s", grads)
 		
+
+
+		# 3, get critic_loss_element_wise
+		critic_values = self.critic_model.predict([cur_states, actions])
+		critic_loss_element = np.power((critic_values-rewards), 2)
+
+		# 7, update priorities for sampling
+		actor_loss_element = self.critic_model.predict([cur_states, predicted_actions])
+		# print("actor_loss_element is %s", actor_loss_element)
+
+		new_priorities  = critic_loss_element
+		new_priorities += self.hyper_parameters_lambda3 * np.power(actor_loss_element,2)
+		new_priorities += self.hyper_parameters_eps
+		new_priorities += self.hyper_parameters_eps_d
+		# print("new_priorities is %s", new_priorities)
+
+
+		######################################################################
+		# update priority of sampled transitions, batch_size.
+		self.memory.update_priorities(indices, new_priorities)
 
 
 
@@ -180,17 +262,16 @@ class ActorCritic:
 
 	def train(self):
 		batch_size = self.batch_size
-		if len(self.memory) < batch_size: #batch_size:
+		if len(self.memory.memory_data()) < batch_size: #batch_size:
 			return
-		samples = random.sample(self.memory, batch_size)    # what is deque, what is random.sample? self.mempory begins with self.memory.append
-		# samples = self.memory.sample(1, batch_size)
+		#samples = random.sample(self.memory.memory_data(), batch_size)    # what is deque, what is random.sample? self.mempory begins with self.memory.append
+		samples = self.memory.sample(1, batch_size)
 		self.samples = samples
 		# print("samples is %s", samples)
 		# print("samples [1] is %s", samples[1])
-		print("length of memory is %s", len(self.memory))
+		print("length of memory is %s", len(self.memory.memory_data()))
 		# print("samples shape is %s", samples.shape)
 		self._train_critic_actor(samples)
-
 
 
 	# ========================================================================= #
@@ -222,7 +303,8 @@ class ActorCritic:
 	# ========================================================================= #
 
 	def act(self, cur_state):  # this function returns action, which is predicted by the model. parameter is epsilon
-		self.epsilon *= self.epsilon_decay
+		#self.epsilon *= self.epsilon_decay
+		self.epsilon = 0.9
 		eps = self.epsilon
 		action = self.actor_model.predict(cur_state)
 		if np.random.random() < self.epsilon:
@@ -230,8 +312,8 @@ class ActorCritic:
 			action[0][1] = action[0][1] + np.random.random()*0.4
 			return action, eps	
 		else:
-			action[0][0] = action[0][0] 
-			action[0][1] = action[0][1]
+			action[0][0] = (np.random.random()-0.5)*2   # angular velocity
+			action[0][1] = np.random.random()   # linear velocity
 			return action, eps
 		
 
@@ -255,13 +337,13 @@ def main():
 	########################################################
 	node = rospy.init_node('talker', anonymous=True)
 	num_robots = 3
-	game_state = ddpg_turtlebot_turtlebot3_original_ddpg_2.GameState(node, -7, 7, 0, '/robot1')   # game_state has frame_step(action) function
-	game_state2 = ddpg_turtlebot_turtlebot3_original_ddpg_2.GameState(node, -7, -7, 0, '/robot2')
-	game_state3 = ddpg_turtlebot_turtlebot3_original_ddpg_2.GameState(node, 0, 0, 0, '/robot3')
+	game_state = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, -7, 7, 0, '/robot1')   # game_state has frame_step(action) function
+	game_state2 = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, -7, -7, 0, '/robot2')
+	game_state3 = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, 0, 0, 0, '/robot3')
 	game_state_list = [game_state, game_state2, game_state3]
 	actor_critic_list = [ActorCritic(game_state, sess) for i in range(num_robots)]
+	# game_state= ddpg_turtlebot_turtlebot3_amcl_fd_replay_human.GameState()   # game_state has frame_step(action) function
 	# actor_critic = ActorCritic(game_state, sess)
-	# actor_critic2 = ActorCritic(game_state2, sess)
 	########################################################
 	num_trials = 10000
 	trial_len  = 500
@@ -271,7 +353,7 @@ def main():
 	current_state_list.append(game_state2.reset())
 	current_state_list.append(game_state3.reset())
 
-	# actor_critic.read_human_data()
+	#actor_critic.read_human_data()
 	
 	step_reward = [0,0]
 	step_Q = [0,0]
@@ -342,7 +424,7 @@ def main():
 
 				Q_values = actor_critic.read_Q_values(current_state, action)
 				step_Q = np.append(step_Q,[step,Q_values[0][0]])
-				print("step_Q is %s", Q_values[0][0])
+				print("Q_values is %s", Q_values[0][0])
 				sio.savemat('step_Q.mat',{'data':step_Q},True,'5', False, False,'row')
 
 				start_time = time.time()
@@ -375,12 +457,11 @@ def main():
 			print("trial:" + str(i))
 			for j in range(num_robots):
 				current_state_list[j] = game_state_list[j].reset()
-			# current_state2 = game_state2.reset()
 			for j in range(num_robots):
 				# actor_critic.actor_model.load_weights("actormodel-160-500.h5")
 				# actor_critic.critic_model.load_weights("criticmodel-160-500.h5")
-				actor_critic_list[j].actor_model.load_weights("actormodel-490-2000.h5")
-				actor_critic_list[j].critic_model.load_weights("criticmodel-490-2000.h5")
+				actor_critic_list[j].actor_model.load_weights("actormodel-10-2000.h5")
+				actor_critic_list[j].critic_model.load_weights("criticmodel-10-2000.h5")
 			##############################################################################################
 			total_reward_list = [0 for i in range(num_robots)]
 			

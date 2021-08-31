@@ -79,7 +79,7 @@ class GameState:
         self.x = x
         self.y = y
         self.z = z
-
+        
         self.pub = rospy.Publisher(self.robot + '/cmd_vel', Twist, queue_size=1)
         self.position = Point()
         self.move_cmd = Twist()
@@ -172,16 +172,16 @@ class GameState:
         index_list = [-1, 1]
         index_x = random.choice(index_list)
         index_y = random.choice(index_list)
-
+        index_turtlebot_y = random.choice(index_list)
         # for maze
-        # self.target_x = (np.random.random()-0.5)*5 + 12*index_x
-        # self.target_y = (np.random.random()-0.5)*5 + 12*index_y
-        #random_turtlebot_y = (np.random.random())*4 + index_turtlebot_y
+        self.target_x = (np.random.random()-0.5)*5 + 12*index_x
+        self.target_y = (np.random.random()-0.5)*5 + 12*index_y
+        random_turtlebot_y = (np.random.random())*4 + index_turtlebot_y
 
         # for corridor
-        self.target_x = (np.random.random()-0.5)*5 + 12*index_x
-        self.target_y = (np.random.random()-0.5)*3
-        random_turtlebot_y = (np.random.random())*5 #+ index_turtlebot_y
+        # self.target_x = (np.random.random()-0.5)*5 + 12*index_x
+        # self.target_y = (np.random.random()-0.5)*3
+        # random_turtlebot_y = (np.random.random())*5 #+ index_turtlebot_y
 
 
         self.arrived = False
@@ -199,7 +199,7 @@ class GameState:
         state_msg.pose.orientation.w = 0
 
         state_target_msg = ModelState()    
-        state_target_msg.model_name = 'unit_sphere_0_0'# + self.robot[1:] #'unit_sphere_0_0' #'unit_box_1' #'cube_20k_0'
+        state_target_msg.model_name = 'unit_sphere_0_0' #'unit_sphere_0_0' #'unit_box_1' #'cube_20k_0'
         state_target_msg.pose.position.x = self.target_x
         state_target_msg.pose.position.y = self.target_y
         state_target_msg.pose.position.z = 0.0
@@ -221,8 +221,8 @@ class GameState:
             resp = set_state( state_msg )
             resp_target = set_state( state_target_msg )
 
-        except rospy.ServiceException as e:
-            print ("Service call failed: {}".format(e))
+        except rospy.ServiceException, e:
+            print "Service call failed: %s" % e
 
         initial_state = np.ones(self.state_num)
         #initial_state[self.state_num-2] = 0
