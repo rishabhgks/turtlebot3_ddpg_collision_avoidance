@@ -89,7 +89,8 @@ class GameState:
         self.laser_info = rospy.Subscriber(self.robot + "/laserscan_filtered", LaserScan, self.laser_ig)
         # self.bumper_info = rospy.Subscriber("/mobile_base/events/bumper", BumperEvent, self.processBump)
 
-
+        self.arrived = False
+        self.crashed = False
         # tf
         self.tf_listener = tf.TransformListener()
         self.odom_frame = self.robot + '_tf/odom' if self.robot != "" else 'odom'
@@ -159,6 +160,15 @@ class GameState:
             print("rotation is %s, ", self.rotation)
 
 
+    def stop(self):
+        self.move_cmd.linear.x = 0
+        self.move_cmd.angular.z = 0
+        self.pub.publish(self.move_cmd)
+        time.sleep(1)
+        self.pub.publish(self.move_cmd)
+        self.rate.sleep()
+
+
     def reset(self):
         index_list = [-1, 1]
         index_x = random.choice(index_list)
@@ -175,7 +185,8 @@ class GameState:
         random_turtlebot_y = (np.random.random())*5 #+ index_turtlebot_y
 
 
-
+        self.arrived = False
+        self.crashed = False
         self.crash_indicator = 0
 
         state_msg = ModelState()    
@@ -241,8 +252,10 @@ class GameState:
                 self.laser_crashed_reward = -80
             if (laser_values[i] < range_limit):
                 self.laser_crashed_value = 1
+                self.crashed = True
                 self.laser_crashed_reward = -200
-                self.reset()
+                self.stop()
+                # self.reset()
                 time.sleep(1)
                 break
         return self.laser_crashed_reward
@@ -360,7 +373,9 @@ class GameState:
         self.arrive_reward = 0
         if distance_turtlebot_target<1:
             self.arrive_reward = 100
-            self.reset()
+            self.arrived = True
+            self.stop()
+            # self.reset()
             time.sleep(1)
 
 
