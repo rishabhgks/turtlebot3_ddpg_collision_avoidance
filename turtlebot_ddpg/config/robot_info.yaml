@@ -1,0 +1,4 @@
+robot_info:
+  num_robot: 5
+  num_target: 3
+  target_pos_flag: False
