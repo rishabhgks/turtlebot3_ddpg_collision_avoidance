@@ -28,13 +28,18 @@ from tf.transformations import quaternion_from_euler
 import shlex
 from psutil import Popen
 
-positions = [[0.5, 0.5], [0.5, 1.5], [0.5, 2.5], [0.5, -0.5], [0.5, -1.5], [0.5, -2.5], [0.5, -3.5], [0.5, -4.5], [0.5, -5.5], [0.5, -6.5], \
-			[-0.5, 6.5], [-0.5, 5.5], [-0.5, 4.5], [-0.5, 3.5], [-0.5, 2.5], [-0.5, 1.5], [-0.5, 0.5], [-0.5, -0.5], [-0.5, -1.5], [-0.5, -2.5], \
-			[-0.5, -3.5], [-0.5, -4.5], [-0.5, -5.5], [-0.5, -6.5], [-0.5, -7.5], [-0.5, 7.5], [-6.5, 0.5], [-6.5, 1.5], [-6.5, 2.5], [-6.5, 3.5],\
-			[-6.5, 4.5], [-6.5, 5.5], [-6.5, 6.5], [-6.5, 7.5], [-7.5, 0.5], [-7.5, 1.5], [-7.5, 2.5], [-7.5, 3.5], [-7.5, 4.5], [-7.5, 5.5], \
-			[-7.5, 6.5], [-7.5, 7.5], [-7.5, 8.5], [5.5, 4.5], [5.5, 3.5], [5.5, 2.5], [5.5, 1.5], [5.5, 0.5], [5.5, -0.5], [5.5, -1.5], \
-			[5.5, -2.5], [5.5, -3.5], [5.5, -4.5], [5.5, -5.5], [5.5, 5.5], [6.5, -6.5], [6.5, -5.5], [6.5, -4.5], [6.5, -3.5], [6.5, -2.5], \
-			[6.5, -1.5], [6.5, -0.5], [6.5, 0.5], [6.5, 1.5], [6.5, 2.5], [6.5, 3.5], [6.5, 4.5], [6.5, 5.5], [6.5, 6.5]]
+# positions = [[0.5, 0.5], [0.5, 1.5], [0.5, 2.5], [0.5, -0.5], [0.5, -1.5], [0.5, -2.5], [0.5, -3.5], [0.5, -4.5], [0.5, -5.5], [0.5, -6.5], \
+# 			[-0.5, 6.5], [-0.5, 5.5], [-0.5, 4.5], [-0.5, 3.5], [-0.5, 2.5], [-0.5, 1.5], [-0.5, 0.5], [-0.5, -0.5], [-0.5, -1.5], [-0.5, -2.5], \
+# 			[-0.5, -3.5], [-0.5, -4.5], [-0.5, -5.5], [-0.5, -6.5], [-0.5, -7.5], [-0.5, 7.5], [-6.5, 0.5], [-6.5, 1.5], [-6.5, 2.5], [-6.5, 3.5],\
+# 			[-6.5, 4.5], [-6.5, 5.5], [-6.5, 6.5], [-6.5, 7.5], [-7.5, 0.5], [-7.5, 1.5], [-7.5, 2.5], [-7.5, 3.5], [-7.5, 4.5], [-7.5, 5.5], \
+# 			[-7.5, 6.5], [-7.5, 7.5], [-7.5, 8.5], [5.5, 4.5], [5.5, 3.5], [5.5, 2.5], [5.5, 1.5], [5.5, 0.5], [5.5, -0.5], [5.5, -1.5], \
+# 			[5.5, -2.5], [5.5, -3.5], [5.5, -4.5], [5.5, -5.5], [5.5, 5.5], [6.5, -6.5], [6.5, -5.5], [6.5, -4.5], [6.5, -3.5], [6.5, -2.5], \
+# 			[6.5, -1.5], [6.5, -0.5], [6.5, 0.5], [6.5, 1.5], [6.5, 2.5], [6.5, 3.5], [6.5, 4.5], [6.5, 5.5], [6.5, 6.5]]
+
+obstacle_loc = [[-4.04425, 3.20234], [-5.14539, 7.37162], [-8.63656, 8.3542], [8.99149, 8.22035], [8.52195, -2.66946], [-1.71052, 6.6387], \
+	[-6.50286, -0.994075], [5.0846, 6.34804], [4.12434, -1.66097], [-7.26809, -9.17929], [7.65097, -9.61432], [0.166115, -8.22319], \
+		[0.923208, 3.95612], [4.48937, 3.02562], [-2.26939, -2.15261], [-5.00778, -5.72124], [2.4509, -5.46721], [7.31786, -5.83205], \
+			[-8.39409, 2.53726], [8.62944, 3.46707], [-8.03787, -4.33587], [-13.2814, 13.1262], [7.39829, 0.553822]] 
 
 def batch_stack_samples(samples):
 	array = np.array(samples)
@@ -51,7 +56,7 @@ def batch_stack_samples(samples):
 
 
 	return current_states, actions, rewards, new_states, dones, weights, indices, eps_d
-	
+
 
 # determines how to assign values to each state, i.e. takes the state
 # and action (two-input model) and determines the corresponding value
@@ -116,10 +121,10 @@ class ActorCritic:
 
 	def create_actor_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		h1 = Dense(500, activation='relu')(state_input)
+		h1 = Dense(1024, activation='relu')(state_input)
 		#h2 = Dense(1000, activation='relu')(h1)
-		h2 = Dense(500, activation='relu')(h1)
-		h3 = Dense(500, activation='relu')(h2)
+		h2 = Dense(1024, activation='relu')(h1)
+		h3 = Dense(1024, activation='relu')(h2)
 		delta_theta = Dense(1, activation='tanh')(h3) 
 		speed = Dense(1, activation='sigmoid')(h3) # sigmoid makes the output to be range [0, 1]
 
@@ -133,15 +138,15 @@ class ActorCritic:
 
 	def create_critic_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		state_h1 = Dense(500, activation='relu')(state_input)
+		state_h1 = Dense(1024, activation='relu')(state_input)
 		#state_h2 = Dense(1000)(state_h1)
 
 		action_input = Input(shape=self.env.action_space.shape)
-		action_h1    = Dense(500)(action_input)
+		action_h1    = Dense(1024)(action_input)
 
 		merged    = Concatenate()([state_h1, action_h1])
-		merged_h1 = Dense(500, activation='relu')(merged)
-		merged_h2 = Dense(500, activation='relu')(merged_h1)
+		merged_h1 = Dense(1024, activation='relu')(merged)
+		merged_h2 = Dense(1024, activation='relu')(merged_h1)
 		output = Dense(1, activation='linear')(merged_h2)
 		model  = Model(input=[state_input,action_input], output=output)
 
@@ -339,13 +344,38 @@ class ActorCritic:
 
 	def play(self, cur_state):
 		return self.actor_model.predict(cur_state)
-
+	
+def InRectPoint(obs, loc, gap):
+	x = loc[0]
+	y = loc[1]
+	x1 = obs[0] - gap
+	y1 = obs[1] - gap
+	x2 = obs[0] + gap
+	y2 = obs[1] + gap
+	if (x > x1 and x < x2 and
+		y > y1 and y < y2) :
+		return True
+	else :
+		return False
 
 
 def my_custom_random(exclude):
-  randInt = random.randint(0, len(positions))
-  return my_custom_random(exclude) if randInt in exclude else randInt 
+	while True:
+		randInt = random.randint(0, len(positions))
+		return my_custom_random(exclude) if randInt in exclude else randInt 
 
+
+def get_position(obstacles):
+	while True:
+		crash = False
+		randx = random.uniform(-10, 10)
+		randy = random.uniform(-10, 10)
+		for obs in obstacles:
+			if InRectPoint(obs, [randx, randy], 1.3):
+				crash = True
+				break
+		if not crash:
+			return [randx, randy]
 
 def main():
 	
@@ -397,12 +427,15 @@ def main():
 	# urdf = f.read()
 	# f.close()
 	urdf = rospy.get_param('/robot_description')
+	target_count = 0
 	
 	for i in range(num_robots):
 		rospy.set_param('/robot'+str(i)+'/tf_prefix', 'robot'+str(i)+'_tf')
 	for i in range(num_robots):
-		pos = my_custom_random(robot_pos)
-		robot_pos.append(pos)
+		# pos = my_custom_random(robot_pos)
+		# robot_pos.append(pos)
+		pos = get_position(obstacle_loc)
+		obstacle_loc.append(pos)
 		# initial_pose.position.x = positions[pos][0]
 		# initial_pose.position.y = positions[pos][1]
 		# initial_pose.position.z = 0.0
@@ -421,10 +454,11 @@ def main():
 		# spawn_resp = spawn_model_proxy(spawn_request)
 		# rospy.loginfo('Robot Model spawn {} at {}, {},\n{}'.format(spawn_resp.success, positions[pos][0], positions[pos][1], spawn_resp.status_message))
 		node_process = Popen(shlex.split("roslaunch turtlebot_ddpg one_robot_group.launch robot_name:='robot"+ str(i) +"' init_pose:='-x " \
-            + str(positions[pos][0]) + " -y " + str(positions[pos][1]) + " -z 0' namespace:='robot" + str(i) + "'"))
+            + str(pos[0]) + " -y " + str(pos[1]) + " -z 0' namespace:='robot" + str(i) + "'"))
 		node_process = Popen(shlex.split('roslaunch turtlebot_ddpg turtlebot3_laser_filter_dyn.launch num:='+str(i)))
-		game_state = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, positions[pos][0], positions[pos][1], 0, '/robot'+str(i))   # game_state has frame_step(action) function
+		game_state = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, pos[0], pos[1], 0, '/robot'+str(i), 'unit_sphere_test_' + str(target_count % num_targets))   # game_state has frame_step(action) function
 		game_state_list.append(game_state)
+		target_count += 1
 
 	time.sleep(14)
 	# game_state2 = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, -7, -7, 0, '/robot1')
@@ -438,9 +472,8 @@ def main():
 	trial_len  = 500
 	train_indicator = 0
 	current_state_list = []
-	current_state_list.append(game_state.reset())
-	current_state_list.append(game_state2.reset())
-	current_state_list.append(game_state3.reset())
+	for i in range(len(game_state_list)):
+		current_state_list.append(game_state_list[i].reset())
 
 	#actor_critic.read_human_data()
 	
@@ -549,8 +582,10 @@ def main():
 			for j in range(num_robots):
 				# actor_critic.actor_model.load_weights("actormodel-160-500.h5")
 				# actor_critic.critic_model.load_weights("criticmodel-160-500.h5")
-				actor_critic_list[j].actor_model.load_weights("actormodel-10-2000.h5")
-				actor_critic_list[j].critic_model.load_weights("criticmodel-10-2000.h5")
+				# actor_critic_list[j].actor_model.load_weights("actormodel-10-2000.h5")
+				# actor_critic_list[j].critic_model.load_weights("criticmodel-10-2000.h5")
+				actor_critic_list[j].actor_model.load_weights("/home/rishabh/Downloads/actormodel-500-2000.h5")
+				actor_critic_list[j].critic_model.load_weights("/home/rishabh/Downloads/criticmodel-500-2000.h5")
 			##############################################################################################
 			total_reward_list = [0 for i in range(num_robots)]
 			

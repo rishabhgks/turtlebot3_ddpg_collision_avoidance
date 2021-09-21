@@ -68,7 +68,7 @@ class InfoGetter(object):
 
 class GameState:
 
-    def __init__(self, node, x, y, z, robot=""):
+    def __init__(self, node, x, y, z, robot="", target_model = "unit_sphere_0_0"):
         self.robot = robot
         # self.nodename = self.robot[1:] + '_talker' if self.robot != "" else 'talker'
         # self.talker_node = rospy.init_node(self.nodename, anonymous=True)
@@ -79,7 +79,7 @@ class GameState:
         self.x = x
         self.y = y
         self.z = z
-        
+        self.target_model = target_model
         self.pub = rospy.Publisher(self.robot + '/cmd_vel', Twist, queue_size=1)
         self.position = Point()
         self.move_cmd = Twist()
@@ -199,7 +199,7 @@ class GameState:
         state_msg.pose.orientation.w = 0
 
         state_target_msg = ModelState()    
-        state_target_msg.model_name = 'unit_sphere_0_0' #'unit_sphere_0_0' #'unit_box_1' #'cube_20k_0'
+        state_target_msg.model_name = self.target_model #'unit_sphere_0_0' #'unit_box_1' #'cube_20k_0'
         state_target_msg.pose.position.x = self.target_x
         state_target_msg.pose.position.y = self.target_y
         state_target_msg.pose.position.z = 0.0
@@ -285,7 +285,7 @@ class GameState:
         rospy.wait_for_service('/gazebo/get_model_state')
         try:
             get_state = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            resp_target = get_state('unit_sphere_0_0', '')
+            resp_target = get_state(self.target_model, '')
             self.target_x = resp_target.pose.position.x
             self.target_y = resp_target.pose.position.y
         except rospy.ServiceException as e:

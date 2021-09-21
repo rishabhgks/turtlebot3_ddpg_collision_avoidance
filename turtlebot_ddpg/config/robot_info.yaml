@@ -1,4 +1,4 @@
 robot_info:
-  num_robot: 5
-  num_target: 3
+  num_robot: 3
+  num_target: 2
   target_pos_flag: False
