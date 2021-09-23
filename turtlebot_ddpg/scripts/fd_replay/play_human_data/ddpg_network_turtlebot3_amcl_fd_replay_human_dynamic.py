@@ -22,19 +22,16 @@ import scipy.io as sio
 import rospy
 import rospkg
 from priortized_replay_buffer import PrioritizedReplayBuffer
-from gazebo_msgs.srv import SpawnModel, SpawnModelRequest, SpawnModelResponse
+from gazebo_msgs.srv import SpawnModel, SpawnModelRequest, SpawnModelResponse, DeleteModel, DeleteModelRequest, DeleteModelResponse
 from geometry_msgs.msg import Pose, Quaternion
 from tf.transformations import quaternion_from_euler
 import shlex
 from psutil import Popen
+import roslaunch
+import os
+tim = time.time()
+os.mkdir('ddpg_per_' + str(tim))
 
-# positions = [[0.5, 0.5], [0.5, 1.5], [0.5, 2.5], [0.5, -0.5], [0.5, -1.5], [0.5, -2.5], [0.5, -3.5], [0.5, -4.5], [0.5, -5.5], [0.5, -6.5], \
-# 			[-0.5, 6.5], [-0.5, 5.5], [-0.5, 4.5], [-0.5, 3.5], [-0.5, 2.5], [-0.5, 1.5], [-0.5, 0.5], [-0.5, -0.5], [-0.5, -1.5], [-0.5, -2.5], \
-# 			[-0.5, -3.5], [-0.5, -4.5], [-0.5, -5.5], [-0.5, -6.5], [-0.5, -7.5], [-0.5, 7.5], [-6.5, 0.5], [-6.5, 1.5], [-6.5, 2.5], [-6.5, 3.5],\
-# 			[-6.5, 4.5], [-6.5, 5.5], [-6.5, 6.5], [-6.5, 7.5], [-7.5, 0.5], [-7.5, 1.5], [-7.5, 2.5], [-7.5, 3.5], [-7.5, 4.5], [-7.5, 5.5], \
-# 			[-7.5, 6.5], [-7.5, 7.5], [-7.5, 8.5], [5.5, 4.5], [5.5, 3.5], [5.5, 2.5], [5.5, 1.5], [5.5, 0.5], [5.5, -0.5], [5.5, -1.5], \
-# 			[5.5, -2.5], [5.5, -3.5], [5.5, -4.5], [5.5, -5.5], [5.5, 5.5], [6.5, -6.5], [6.5, -5.5], [6.5, -4.5], [6.5, -3.5], [6.5, -2.5], \
-# 			[6.5, -1.5], [6.5, -0.5], [6.5, 0.5], [6.5, 1.5], [6.5, 2.5], [6.5, 3.5], [6.5, 4.5], [6.5, 5.5], [6.5, 6.5]]
 
 obstacle_loc = [[-4.04425, 3.20234], [-5.14539, 7.37162], [-8.63656, 8.3542], [8.99149, 8.22035], [8.52195, -2.66946], [-1.71052, 6.6387], \
 	[-6.50286, -0.994075], [5.0846, 6.34804], [4.12434, -1.66097], [-7.26809, -9.17929], [7.65097, -9.61432], [0.166115, -8.22319], \
@@ -377,34 +374,31 @@ def get_position(obstacles):
 		if not crash:
 			return [randx, randy]
 
-def main():
-	
-	sess = tf.Session()
-	K.set_session(sess)
 
-	########################################################
-	node = rospy.init_node('talker', anonymous=True)
-
-	spawn_model_proxy = rospy.ServiceProxy('gazebo/spawn_sdf_model', SpawnModel)
-	num_robots = rospy.get_param('/robot_info/num_robot')
-	num_targets = rospy.get_param('/robot_info/num_target')
-	robot_pos = []
-	game_state_list = []
-
-	# Spawning Targets
-	r = rospkg.RosPack()
-	file_path = r.get_path('turtlebot_ddpg')
-	file_path = file_path+'/worlds/unit_sphere/model.sdf'
-	f= open(file_path,'r')
-	sdf = f.read()
-	f.close()
-	for i in range(num_targets):
-		index_list = [-1, 1]
+def get_target_position(obstacles):
+	index_list = [-1, 1]
+	while True:
+		crash = False
 		index_x = random.choice(index_list)
 		index_y = random.choice(index_list)
+		randx = (np.random.random()-0.5)*5 + 12*index_x
+		randy = (np.random.random()-0.5)*5 + 12*index_y
+		for obs in obstacles:
+			if InRectPoint(obs, [randx, randy], 1.3):
+				crash = True
+				break
+		if not crash:
+			return [randx, randy]
+
+
+def spawn_targets(n, sdf, spawn_model_proxy, obstacles):
+	target_obs = obstacles
+	for i in range(n):
 		initial_pose = Pose()
-		initial_pose.position.x = (np.random.random()-0.5)*5 + 12*index_x
-		initial_pose.position.y = (np.random.random()-0.5)*5 + 12*index_y
+		pos = get_target_position(target_obs)
+		target_obs.append(pos)
+		initial_pose.position.x = pos[0]
+		initial_pose.position.y = pos[1]
 		initial_pose.position.z = 0.0
 		orint = quaternion_from_euler(0, 1.57, 0)
 		initial_pose.orientation = Quaternion(orint[0],orint[1],orint[2],orint[3])
@@ -419,65 +413,119 @@ def main():
 		rospy.wait_for_service('gazebo/spawn_sdf_model')
 		spawn_resp = spawn_model_proxy(spawn_request)
 		rospy.loginfo('Model spawn {},\n{}'.format(spawn_resp.success, spawn_resp.status_message))
-	
-	# Spawning Robots
-	# file_path = r.get_path('turtlebot3_description')
-	# file_path = file_path+'/urdf/turtlebot3_waffle_pi.urdf.xacro'
-	# f= open(file_path,'r')
-	# urdf = f.read()
-	# f.close()
-	urdf = rospy.get_param('/robot_description')
+
+
+def spawn_robots(n, urdf, node, num_targets):
+	robot_pos = obstacle_loc
+	game_state_list = []
 	target_count = 0
-	
-	for i in range(num_robots):
+	node_process=[]
+	for i in range(n):
 		rospy.set_param('/robot'+str(i)+'/tf_prefix', 'robot'+str(i)+'_tf')
-	for i in range(num_robots):
-		# pos = my_custom_random(robot_pos)
-		# robot_pos.append(pos)
-		pos = get_position(obstacle_loc)
-		obstacle_loc.append(pos)
-		# initial_pose.position.x = positions[pos][0]
-		# initial_pose.position.y = positions[pos][1]
-		# initial_pose.position.z = 0.0
-		# orint = quaternion_from_euler(0, 1.57, 0)
-		# initial_pose.orientation = Quaternion(orint[0],orint[1],orint[2],orint[3])
-		
-		# spawn_request = SpawnModelRequest()
-		# spawn_request.model_name = 'robot' + str(i)
-		# spawn_request.model_xml = urdf
-		# spawn_request.robot_namespace = 'robot' + str(i)
-		# spawn_request.reference_frame = ''
-		# spawn_request.initial_pose = initial_pose
-		
-		# spawn_resp = SpawnModelResponse()
-		# rospy.wait_for_service('gazebo/spawn_urdf_model')
-		# spawn_resp = spawn_model_proxy(spawn_request)
-		# rospy.loginfo('Robot Model spawn {} at {}, {},\n{}'.format(spawn_resp.success, positions[pos][0], positions[pos][1], spawn_resp.status_message))
-		node_process = Popen(shlex.split("roslaunch turtlebot_ddpg one_robot_group.launch robot_name:='robot"+ str(i) +"' init_pose:='-x " \
+	for i in range(n):
+		pos = get_position(robot_pos)
+		robot_pos.append(pos)
+		node_process1 = Popen(shlex.split("roslaunch turtlebot_ddpg one_robot_group.launch robot_name:='robot"+ str(i) +"' init_pose:='-x " \
             + str(pos[0]) + " -y " + str(pos[1]) + " -z 0' namespace:='robot" + str(i) + "'"))
-		node_process = Popen(shlex.split('roslaunch turtlebot_ddpg turtlebot3_laser_filter_dyn.launch num:='+str(i)))
+		node_process2 = Popen(shlex.split('roslaunch turtlebot_ddpg turtlebot3_laser_filter_dyn.launch num:='+str(i)))
 		game_state = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, pos[0], pos[1], 0, '/robot'+str(i), 'unit_sphere_test_' + str(target_count % num_targets))   # game_state has frame_step(action) function
 		game_state_list.append(game_state)
+		node_process3 = Popen(shlex.split('roslaunch turtlebot_ddpg static_transform.launch robot_name:='+str(i)))
+		node_process.extend([node_process1, node_process2, node_process3])
 		target_count += 1
+	return game_state_list, node_process
 
-	time.sleep(14)
-	# game_state2 = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, -7, -7, 0, '/robot1')
-	# game_state3 = ddpg_turtlebot_turtlebot3_amcl_fd_replay_human_multi.GameState(node, 0, 0, 0, '/robot2')
-	# game_state_list = [game_state, game_state2, game_state3]
-	actor_critic_list = [ActorCritic(game_state, sess) for i in range(num_robots)]
-	# game_state= ddpg_turtlebot_turtlebot3_amcl_fd_replay_human.GameState()   # game_state has frame_step(action) function
-	# actor_critic = ActorCritic(game_state, sess)
+
+def delete_models(n, delete_model_proxy, model='target'):
+	node_process = []
+	for i in range(n):
+		delete_request = DeleteModelRequest()
+		if model == 'target':
+			delete_request.model_name = 'unit_sphere_test_' + str(i)
+		else:
+			delete_request.model_name = 'robot' + str(i)	
+			node_process1 = Popen(shlex.split('rosnode kill /robot' + str(i) + '/robot_state_publisher'))
+			node_process2 = Popen(shlex.split('rosnode kill /robot' + str(i) + '_map'))
+			node_process3 = Popen(shlex.split('rosnode kill /laser_filter_' + str(i)))
+			rospy.delete_param('/robot'+str(i)+'/tf_prefix')
+			node_process.extend([node_process1, node_process2, node_process3])
+		delete_resp = DeleteModelResponse()
+		rospy.wait_for_service('gazebo/delete_model')
+		delete_resp = delete_model_proxy(delete_request)
+		rospy.loginfo('Model spawn {},\n{}'.format(delete_resp.success, delete_resp.status_message))
+	return node_process	
+
+
+# def delete_robots(n, delete_model_proxy):
+# 	for i in range(n):
+# 		delete_request = DeleteModelRequest()
+# 		delete_request.model_name = 'robot' + str(i)
+		
+# 		delete_resp = DeleteModelResponse()
+# 		rospy.wait_for_service('gazebo/delete_model')
+# 		delete_resp = delete_model_proxy(delete_request)
+# 		rospy.loginfo('Model spawn {},\n{}'.format(delete_resp.success, delete_resp.status_message))
+
+
+def main():
+	global tim
+	sess = tf.Session()
+	K.set_session(sess)
+
 	########################################################
-	num_trials = 10000
-	trial_len  = 500
+	node = rospy.init_node('talker', anonymous=True)
+
+	# robot_pos = []
+	game_state_list = []
+
+	# Spawning Targets
+	r = rospkg.RosPack()
+	file_path = r.get_path('turtlebot_ddpg')
+	file_path = file_path+'/worlds/unit_sphere/model.sdf'
+	f= open(file_path,'r')
+	sdf = f.read()
+	f.close()
+	
+	# Spawning Robots
+	# for i in range(20):
+	# 	# node_process = Popen(shlex.split("roslaunch turtlebot_ddpg turtlebot3_empty_world.launch world_file:='/home/rishabh/genesys3_ws/src/turtlebot3_ddpg_collision_avoidance/turtlebot_ddpg/worlds/turtlebot3_modified_maze.world'"))
+	# 	launch_file = '/home/rishabh/genesys3_ws/src/turtlebot3_ddpg_collision_avoidance/turtlebot_ddpg/launch/turtlebot3_empty_world.launch'
+	# 	uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+	# 	roslaunch.configure_logging(uuid)
+	# 	launch = roslaunch.parent.ROSLaunchParent(uuid, [launch_file])
+	# 	launch.start()
+	# 	rospy.loginfo("started")
+	# 	time.sleep(6)
+	# 	robot_range = rospy.get_param('/robot_info/num_robot')
+	# 	num_robots = random.randint(2, robot_range+1)
+	# 	num_targets = random.randint(1, num_robots)
+	# 	urdf = rospy.get_param('/robot_description')
+	# 	spawn_model_proxy = rospy.ServiceProxy('gazebo/spawn_sdf_model', SpawnModel)
+	# 	delete_model_proxy = rospy.ServiceProxy('gazebo/delete_model', DeleteModel)
+	# 	spawn_targets(num_targets, sdf, spawn_model_proxy)
+	# 	spawn_robots(num_robots, urdf, node, num_targets)
+
+	# 	# time.sleep(2)
+	# 	actor_critic_list = [ActorCritic(game_state_list[i], sess) for i in range(num_robots)]
+	# 	current_state_list = []
+	# 	for i in range(len(game_state_list)):
+	# 		current_state_list.append(game_state_list[i].reset())
+	# 	# time.sleep(2)
+
+	# 	# delete_models(num_targets, delete_model_proxy, model='target')
+	# 	# delete_models(num_robots, delete_model_proxy, model='robot')
+	# 	# node_process.terminate()
+	# 	launch.shutdown()
+	# 	node_process2 = Popen(shlex.split('rosnode kill /gazebo'))
+	# 	node_process2 = Popen(shlex.split('rosnode kill /gazebo_gui'))
+	########################################################
+	num_trials = 1000
+	trial_len  = 2000
 	train_indicator = 0
-	current_state_list = []
-	for i in range(len(game_state_list)):
-		current_state_list.append(game_state_list[i].reset())
 
 	#actor_critic.read_human_data()
 	
-	step_reward = [0,0]
+	step_reward = [0, 0, 0, 0]
 	step_Q = [0,0]
 	step = 0
 
@@ -577,6 +625,28 @@ def main():
 	if train_indicator==0:
 		for i in range(num_trials):
 			print("trial:" + str(i))
+			launch_file = '/home/rishabh/genesys3_ws/src/turtlebot3_ddpg_collision_avoidance/turtlebot_ddpg/launch/turtlebot3_empty_world.launch'
+			uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+			roslaunch.configure_logging(uuid)
+			launch = roslaunch.parent.ROSLaunchParent(uuid, [launch_file])
+			launch.start()
+			rospy.loginfo("started")
+			time.sleep(6)
+			robot_range = rospy.get_param('/robot_info/num_robot')
+			num_robots = random.randint(2, robot_range+1)
+			num_targets = random.randint(1, num_robots-1)
+			urdf = rospy.get_param('/robot_description')
+			spawn_model_proxy = rospy.ServiceProxy('gazebo/spawn_sdf_model', SpawnModel)
+			delete_model_proxy = rospy.ServiceProxy('gazebo/delete_model', DeleteModel)
+			spawn_targets(num_targets, sdf, spawn_model_proxy, obstacle_loc)
+			game_state_list, robot_node_process = spawn_robots(num_robots, urdf, node, num_targets)
+
+			# time.sleep(2)
+			actor_critic_list = [ActorCritic(game_state_list[i], sess) for i in range(num_robots)]
+			current_state_list = []
+			for i in range(len(game_state_list)):
+				current_state_list.append(game_state_list[i].reset())
+			# time.sleep(2)
 			for j in range(num_robots):
 				current_state_list[j] = game_state_list[j].reset()
 			for j in range(num_robots):
@@ -610,12 +680,11 @@ def main():
 						if j == (trial_len - 1):
 							crashed_value = 1
 							print("this is reward:", total_reward_list[k])
-							
-
-						# if (j % 5 == 0):
-						# 	actor_critic.train()
-						# 	actor_critic.update_target()   
 						
+						step += 1
+						step_reward = np.append(step_reward,[i+1, step,reward, tim])
+						sio.savemat('ddpg_per_' + str(tim) + '/iter{}_step_debug_robot{}_reward.mat'.format(i, k),{'data':step_reward},True,'5', False, False,'row')
+
 						new_state = new_state.reshape((1, game_state_list[k].observation_space.shape[0]))
 						# actor_critic.remember(cur_state, action, reward, new_state, done)   # remember all the data using memory, memory data will be samples to samples automatically.
 						# cur_state = new_state
@@ -630,6 +699,17 @@ def main():
 				if do_reset:
 					for k in range(num_robots):
 						game_state_list[k].reset()
+
+			# delete_models(num_targets, delete_model_proxy, model='target')
+			# delete_models(num_robots, delete_model_proxy, model='robot')
+			# node_process.terminate()
+			for i in range(robot_node_process):
+				robot_node_process[i].terminate()
+			launch.shutdown()
+			node_process2 = Popen(shlex.split('rosnode kill /gazebo'))
+			node_process2.terminate
+			node_process2 = Popen(shlex.split('rosnode kill /gazebo_gui'))
+			node_process2.terminate()
 
 if __name__ == "__main__":
 	main()

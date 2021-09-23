@@ -1,9 +1,9 @@
 <launch>
-
-<node pkg="tf" type="static_transform_publisher" name="robot0_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot0_tf/odom  100"/>
-<node pkg="tf" type="static_transform_publisher" name="robot1_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot1_tf/odom  100"/>
+<arg name="robot_name"/>
+<node pkg="tf" type="static_transform_publisher" name="robot$(arg robot_name)_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot$(arg robot_name)_tf/odom  100"/>
+<!-- <node pkg="tf" type="static_transform_publisher" name="robot1_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot1_tf/odom  100"/>
 <node pkg="tf" type="static_transform_publisher" name="robot2_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot2_tf/odom  100"/>
-<!-- <node pkg="tf" type="static_transform_publisher" name="robot3_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot3_tf/odom  100"/>
+<node pkg="tf" type="static_transform_publisher" name="robot3_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot3_tf/odom  100"/>
 <node pkg="tf" type="static_transform_publisher" name="robot4_map" args="0 0 0 0.0 0.0 0.0 1.0  /map /robot4_tf/odom  100"/> -->
 
 </launch>
