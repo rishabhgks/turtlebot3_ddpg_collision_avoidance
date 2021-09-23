@@ -642,9 +642,9 @@ def main():
 			game_state_list, robot_node_process = spawn_robots(num_robots, urdf, node, num_targets)
 
 			# time.sleep(2)
-			actor_critic_list = [ActorCritic(game_state_list[i], sess) for i in range(num_robots)]
+			actor_critic_list = [ActorCritic(game_state_list[i], sess) for j in range(num_robots)]
 			current_state_list = []
-			for i in range(len(game_state_list)):
+			for j in range(len(game_state_list)):
 				current_state_list.append(game_state_list[i].reset())
 			# time.sleep(2)
 			for j in range(num_robots):
