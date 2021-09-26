@@ -27,7 +27,7 @@ from gazebo_msgs.msg import ModelStates
 from gazebo_msgs.msg import ModelState 
 
 from gazebo_msgs.srv import SetModelState
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan, PointCloud2, Image
 #from kobuki_msgs.msg import BumperEvent
 import time
 
@@ -41,7 +41,7 @@ import gym
 import numpy as np
 import math
 import random
-
+from cv_bridge import CvBridge
 from std_srvs.srv import Empty
 
 
@@ -72,6 +72,7 @@ class GameState:
         self.talker_node = rospy.init_node('talker', anonymous=True)
         self.pose_ig = InfoGetter()
         self.laser_ig = InfoGetter()
+        self.depth_ig = InfoGetter()
         self.collision_ig = InfoGetter()
         
 
@@ -79,8 +80,10 @@ class GameState:
         self.position = Point()
         self.move_cmd = Twist()
 
+        self.bridge = CvBridge()
         self.pose_info = rospy.Subscriber("/gazebo/model_states", ModelStates, self.pose_ig)
         self.laser_info = rospy.Subscriber("/laserscan_filtered", LaserScan, self.laser_ig)
+        self.depth_info = rospy.Subscriber("/camera/depth/image_raw", Image, self.depth_ig)
         # self.bumper_info = rospy.Subscriber("/mobile_base/events/bumper", BumperEvent, self.processBump)
 
 
@@ -293,6 +296,17 @@ class GameState:
         laser_values = laser_msg.ranges
         #print('turtlebot laser_msg.ranges is %s', laser_msg.ranges)
         #print('turtlebot laser data is %s', laser_values)
+
+        depth_msg = self.depth_ig.get_msg()
+        depth_image = self.bridge.imgmsg_to_cv2(depth_msg, "passthrough")
+
+        comp_depth_image = depth_image[:40, :]
+        comp_depth_image = np.nan_to_num(comp_depth_image, 100)
+        comp_depth_image = np.
+        flat_depth = comp_depth_image.max(axis=0)
+        scaled_depth = [max(flat_depth[i:i+8]) for i in np.arange(0, depth_image.shape[1], 8)]
+        print("Depth: {}".format(scaled_depth))
+        # compressed_depth_image = 
 
         normalized_laser = [(x)/3.5 for x in (laser_msg.ranges)]
         # print('turtlebot normalized laser range is %s', normalized_laser)
