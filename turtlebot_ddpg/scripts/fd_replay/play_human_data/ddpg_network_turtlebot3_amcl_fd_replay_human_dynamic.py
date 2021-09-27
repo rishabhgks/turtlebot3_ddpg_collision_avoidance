@@ -657,7 +657,7 @@ def main():
 				actor_critic_list[j].actor_model.load_weights("/home/rishabh/Downloads/actormodel-500-2000.h5")
 				actor_critic_list[j].critic_model.load_weights("/home/rishabh/Downloads/criticmodel-500-2000.h5")
 			##############################################################################################
-			total_reward_list = [0 for i in range(num_robots)]
+			total_reward_list = [0 for j in range(num_robots)]
 			
 			for j in range(trial_len):
 				do_reset = True
@@ -703,7 +703,7 @@ def main():
 			# delete_models(num_targets, delete_model_proxy, model='target')
 			# delete_models(num_robots, delete_model_proxy, model='robot')
 			# node_process.terminate()
-			for i in range(robot_node_process):
+			for i, npr in enumerate(robot_node_process):
 				robot_node_process[i].terminate()
 			launch.shutdown()
 			node_process2 = Popen(shlex.split('rosnode kill /gazebo'))
