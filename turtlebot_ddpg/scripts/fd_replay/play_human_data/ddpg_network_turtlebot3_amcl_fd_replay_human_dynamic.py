@@ -520,7 +520,7 @@ def main():
 	# 	node_process2 = Popen(shlex.split('rosnode kill /gazebo_gui'))
 	########################################################
 	num_trials = 1000
-	trial_len  = 2000
+	trial_len  = 200
 	train_indicator = 0
 
 	#actor_critic.read_human_data()
@@ -631,9 +631,9 @@ def main():
 			launch = roslaunch.parent.ROSLaunchParent(uuid, [launch_file])
 			launch.start()
 			rospy.loginfo("started")
-			time.sleep(6)
+			time.sleep(16)
 			robot_range = rospy.get_param('/robot_info/num_robot')
-			num_robots = random.randint(2, robot_range+1)
+			num_robots = random.randint(2, robot_range)
 			num_targets = random.randint(1, num_robots-1)
 			urdf = rospy.get_param('/robot_description')
 			spawn_model_proxy = rospy.ServiceProxy('gazebo/spawn_sdf_model', SpawnModel)
@@ -706,10 +706,11 @@ def main():
 			for i, npr in enumerate(robot_node_process):
 				robot_node_process[i].terminate()
 			launch.shutdown()
-			node_process2 = Popen(shlex.split('rosnode kill /gazebo'))
-			node_process2.terminate
-			node_process2 = Popen(shlex.split('rosnode kill /gazebo_gui'))
-			node_process2.terminate()
+			node_process = Popen(shlex.split('killall -9 gzserver gzclient'))
+			# node_process2 = Popen(shlex.split('rosnode kill /gazebo'))
+			# node_process2.terminate
+			# node_process2 = Popen(shlex.split('rosnode kill /gazebo_gui'))
+			# node_process2.terminate()
 
 if __name__ == "__main__":
 	main()
