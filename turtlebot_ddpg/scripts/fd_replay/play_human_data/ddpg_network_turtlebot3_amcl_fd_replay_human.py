@@ -342,7 +342,7 @@ def main():
 	########################################################
 	num_trials = 501
 	trial_len  = 2000
-	train_indicator = 0
+	train_indicator = 1
 
 	current_state = game_state.reset()
 
@@ -382,8 +382,8 @@ def main():
 	if (train_indicator==1):
 		step_reward = [0, 0, 0, 0]
 		train_start_time = time.time()
-		actor_critic.actor_model.load_weights("actormodel-300-2000.h5")
-		actor_critic.critic_model.load_weights("criticmodel-300-2000.h5")
+		# actor_critic.actor_model.load_weights("actormodel-300-2000.h5")
+		# actor_critic.critic_model.load_weights("criticmodel-300-2000.h5")
 		for i in range(num_trials):
 			print("trial:" + str(i))
 			#game_state.game_step(0.3, 0.2, 0.0)
@@ -413,7 +413,7 @@ def main():
 				step = step + 1
 				#plot_reward(step,reward,ax,fig)
 				# step_reward = np.append(step_reward,[step,reward])
-				step_reward = np.append(step_reward,[i+1, step,reward,end_time-train_start_time])
+				step_reward = np.append(step_reward,[i+1, step,reward,time.time()-train_start_time])
 				sio.savemat('ddpg_per_' + str(tim) + '/step_train_{}_reward.mat'.format(log_time),{'data':step_reward},True,'5', False, False,'row')
 				print("step is %s", step)
 
