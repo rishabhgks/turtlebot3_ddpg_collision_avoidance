@@ -114,7 +114,7 @@ class GameState:
         self.crash_indicator = 0
 
         # observation_space and action_space
-        self.state_num = 88 #28 #685                 # when you change this value, remember to change the reset default function as well
+        self.state_num = 80 #28 #685                 # when you change this value, remember to change the reset default function as well
         self.action_num = 2
         self.observation_space = np.empty(self.state_num)
         self.action_space = np.empty(self.action_num)
@@ -247,21 +247,21 @@ class GameState:
         return self.laser_crashed_reward
 
 
-    def turtlebot_is_crashed_depth(self, depth_values, range_limit):
-        self.depth_crashed_value = 0
-        self.depth_crashed_reward = 0
+    # def turtlebot_is_crashed_depth(self, depth_values, range_limit):
+    #     self.depth_crashed_value = 0
+    #     self.depth_crashed_reward = 0
 
-        for i in range(len(depth_values)):
-            if (depth_values[i] < 2*range_limit):
-                self.depth_crashed_reward = -80
-            if (depth_values[i] < range_limit):
-                self.depth_crashed_value = 1
-                self.depth_crashed_reward = -200
-                print("Reset by Depth Crash, Dist: {}".format(depth_values[i]))
-                self.reset()
-                time.sleep(1)
-                break
-        return self.depth_crashed_reward
+    #     for i in range(len(depth_values)):
+    #         if (depth_values[i] < 2*range_limit):
+    #             self.depth_crashed_reward = -80
+    #         if (depth_values[i] < range_limit):
+    #             self.depth_crashed_value = 1
+    #             self.depth_crashed_reward = -200
+    #             print("Reset by Depth Crash, Dist: {}".format(depth_values[i]))
+    #             self.reset()
+    #             time.sleep(1)
+    #             break
+    #     return self.depth_crashed_reward
 
 
     def game_step(self, time_step=0.1, linear_x=0.8, angular_z=0.3):
@@ -318,8 +318,8 @@ class GameState:
         depth_msg = self.depth_ig.get_msg()
         depth_image = self.bridge.imgmsg_to_cv2(depth_msg, "passthrough")
 
-        comp_depth_image = depth_image[:40, :]
-        comp_depth_image = np.nan_to_num(comp_depth_image, np.inf)
+        # comp_depth_image = depth_image[:40, :]
+        comp_depth_image = np.nan_to_num(depth_image, np.inf)
         for i in range(comp_depth_image.shape[0]):
             for j in range(comp_depth_image.shape[1]):
                 if comp_depth_image[i][j] == 0.0:
@@ -334,14 +334,17 @@ class GameState:
         norm_scaled_depth = [(x)/2.0 for x in scaled_depth]
         # print("Depth: {}".format(norm_scaled_depth))
 
+        final_laser = normalized_laser[:8]
+        final_laser.extend(norm_scaled_depth)
+        final_laser.extend(normalized_laser[-8:])
         # prepare state
         #state = np.append(normalized_laser, angle_diff)
         #state = np.append(normalized_laser,self.target_x- turtlebot_x)
         #state = np.append(state, self.target_y - turtlebot_y)
         current_distance_turtlebot_target = math.sqrt((self.target_x - turtlebot_x)**2 + (self.target_y - turtlebot_y)**2)
 
-        state = np.append(normalized_laser, norm_scaled_depth)
-        state = np.append(state, current_distance_turtlebot_target)
+        # state = np.append(normalized_laser, norm_scaled_depth)
+        state = np.append(final_laser, current_distance_turtlebot_target)
         state = np.append(state, angle_diff)
         state = np.append(state, linear_x*0.26)
         state = np.append(state, angular_z)
@@ -363,13 +366,13 @@ class GameState:
         distance_turtlebot_target = math.sqrt((self.target_x - turtlebot_x)**2 + (self.target_y - turtlebot_y)**2)
         distance_reward = distance_turtlebot_target_previous - distance_turtlebot_target
 
-        self.laser_crashed_reward = self.turtlebot_is_crashed(laser_values, range_limit=0.25)
-        self.laser_reward = sum(normalized_laser)-24
+        self.laser_crashed_reward = self.turtlebot_is_crashed(final_laser, range_limit=0.25)
+        self.laser_reward = sum(final_laser)-76 #24
         self.collision_reward = self.laser_crashed_reward + self.laser_reward
 
-        self.depth_crashed_reward = self.turtlebot_is_crashed_depth(scaled_depth, range_limit=0.25)
-        self.depth_reward = sum(norm_scaled_depth) - 60
-        self.collision_depth_reward = self.depth_crashed_reward + self.depth_reward
+        # self.depth_crashed_reward = self.turtlebot_is_crashed_depth(scaled_depth, range_limit=0.25)
+        # self.depth_reward = sum(norm_scaled_depth) - 60
+        # self.collision_depth_reward = self.depth_crashed_reward + self.depth_reward
 
         self.angular_punish_reward = 0
         self.linear_punish_reward = 0
@@ -392,14 +395,14 @@ class GameState:
 
  
 
-        reward  = distance_reward*(5/time_step)*1.2*7 + self.arrive_reward + self.collision_reward + self.collision_depth_reward + self.angular_punish_reward + self.linear_punish_reward
+        reward  = distance_reward*(5/time_step)*1.2*7 + self.arrive_reward + self.collision_reward + self.angular_punish_reward + self.linear_punish_reward
         # print("laser_reward is %s", self.laser_reward)
         # print("laser_crashed_reward is %s", self.laser_crashed_reward)
         # print("arrive_reward is %s", self.arrive_reward)
         # print("distance reward is : %s", distance_reward*(5/time_step)*1.2*7)
 
 
-        return reward, state, self.laser_crashed_value or self.depth_crashed_value
+        return reward, state, self.laser_crashed_value
 
 
 

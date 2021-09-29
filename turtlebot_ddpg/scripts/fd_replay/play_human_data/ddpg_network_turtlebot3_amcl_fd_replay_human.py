@@ -382,8 +382,8 @@ def main():
 	if (train_indicator==1):
 		step_reward = [0, 0, 0, 0]
 		train_start_time = time.time()
-		# actor_critic.actor_model.load_weights("actormodel-10-2000.h5")
-		# actor_critic.critic_model.load_weights("criticmodel-10-2000.h5")
+		# actor_critic.actor_model.load_weights("actormodel-300-2000.h5")
+		# actor_critic.critic_model.load_weights("criticmodel-300-2000.h5")
 		for i in range(num_trials):
 			print("trial:" + str(i))
 			#game_state.game_step(0.3, 0.2, 0.0)
@@ -454,8 +454,8 @@ def main():
 			print("trial:" + str(i))
 			current_state = game_state.reset()
 			
-			actor_critic.actor_model.load_weights("actormodel-10-2000.h5")
-			actor_critic.critic_model.load_weights("criticmodel-10-2000.h5")
+			actor_critic.actor_model.load_weights("actormodel-300-2000.h5")
+			actor_critic.critic_model.load_weights("criticmodel-300-2000.h5")
 			##############################################################################################
 			total_reward = 0
 			
