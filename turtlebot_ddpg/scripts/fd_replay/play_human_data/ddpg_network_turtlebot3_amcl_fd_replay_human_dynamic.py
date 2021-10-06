@@ -22,12 +22,15 @@ import scipy.io as sio
 import rospy
 import rospkg
 from priortized_replay_buffer import PrioritizedReplayBuffer
-from gazebo_msgs.srv import SpawnModel, SpawnModelRequest, SpawnModelResponse, DeleteModel, DeleteModelRequest, DeleteModelResponse
+from gazebo_msgs.srv import SpawnModel, SpawnModelRequest, SpawnModelResponse, DeleteModel, DeleteModelRequest, DeleteModelResponse, SetModelState, \
+	SetModelStateRequest, SetModelStateResponse
+from gazebo_msgs.msg import ModelState
 from geometry_msgs.msg import Pose, Quaternion
 from tf.transformations import quaternion_from_euler
 import shlex
 from psutil import Popen
 import roslaunch
+import copy
 import os
 tim = time.time()
 os.mkdir('ddpg_per_' + str(tim))
@@ -391,6 +394,22 @@ def get_target_position(obstacles):
 			return [randx, randy]
 
 
+def get_out_position(obstacles):
+	index_list = [1, -1]
+	while True:
+		crash = False
+		index_x = random.choice(index_list)
+		index_y = random.choice(index_list)
+		randx = (np.random.random()-0.5)*2 + 18*index_x
+		randy = (np.random.random()-0.5)*2 + 18*index_y
+		for obs in obstacles:
+			if InRectPoint(obs, [randx, randy], 1.3):
+				crash = True
+				break
+		if not crash:
+			return [randx, randy]
+
+
 def spawn_targets(n, sdf, spawn_model_proxy, obstacles):
 	target_obs = obstacles
 	for i in range(n):
@@ -434,6 +453,66 @@ def spawn_robots(n, urdf, node, num_targets):
 		node_process.extend([node_process1, node_process2, node_process3])
 		target_count += 1
 	return game_state_list, node_process
+
+
+def move_models_in(section, obstacles, set_model_proxy, model='robot'):
+	obs_pos = copy.deepcopy(obstacles)
+	for i in range(section):
+		initial_pose = ModelState()
+		if model=='robot':
+			pos = get_position(obs_pos)
+			initial_pose.model_name = 'robot' + str(i)
+		else:
+			pos = get_target_position(obs_pos)
+			initial_pose.model_name = 'unit_sphere_test_' + str(i)
+		obs_pos.append(pos)
+		initial_pose.pose.position.x = pos[0]
+		initial_pose.pose.position.y = pos[1]
+		initial_pose.pose.position.z = 0.0
+		orint = quaternion_from_euler(0, 1.57, 0)
+		initial_pose.pose.orientation = Quaternion(orint[0],orint[1],orint[2],orint[3])
+		try:
+			resp = set_model_proxy(initial_pose)
+			print("Moved {} {}".format(model, i))
+		except rospy.ServiceException, e:
+			print "Service call failed: %s" % e
+		
+
+def move_models_out(robot_section, target_section, robot_range, set_model_proxy):
+	obs_pos = []
+	for i in range(robot_section, robot_range):
+		initial_pose = ModelState()
+		pos = get_out_position(obs_pos)
+		initial_pose.model_name = 'robot' + str(i)
+		obs_pos.append(pos)
+		initial_pose.pose.position.x = pos[0]
+		initial_pose.pose.position.y = pos[1]
+		initial_pose.pose.position.z = 0.0
+		orint = quaternion_from_euler(0, 1.57, 0)
+		initial_pose.pose.orientation = Quaternion(orint[0],orint[1],orint[2],orint[3])
+		try:
+			resp = set_model_proxy(initial_pose)
+			print("Moved Robot {} outside".format(i))
+		except rospy.ServiceException, e:
+			print "Service call failed: %s" % e
+	for i in range(target_section, robot_range-1):
+		print(target_section, robot_range -1)
+		print("came here tar 1")
+		initial_pose = ModelState()
+		pos = get_out_position(obs_pos)
+		initial_pose.model_name = 'unit_sphere_test_' + str(i)
+		obs_pos.append(pos)
+		initial_pose.pose.position.x = pos[0]
+		initial_pose.pose.position.y = pos[1]
+		initial_pose.pose.position.z = 0.0
+		orint = quaternion_from_euler(0, 1.57, 0)
+		initial_pose.pose.orientation = Quaternion(orint[0],orint[1],orint[2],orint[3])
+		print("came here tar 2")
+		try:
+			resp = set_model_proxy(initial_pose)
+			print("Moved Target {} outside".format(i))
+		except rospy.ServiceException, e:
+			print "Service call failed: %s" % e
 
 
 def delete_models(n, delete_model_proxy, model='target'):
@@ -486,41 +565,9 @@ def main():
 	sdf = f.read()
 	f.close()
 	
-	# Spawning Robots
-	# for i in range(20):
-	# 	# node_process = Popen(shlex.split("roslaunch turtlebot_ddpg turtlebot3_empty_world.launch world_file:='/home/rishabh/genesys3_ws/src/turtlebot3_ddpg_collision_avoidance/turtlebot_ddpg/worlds/turtlebot3_modified_maze.world'"))
-	# 	launch_file = '/home/rishabh/genesys3_ws/src/turtlebot3_ddpg_collision_avoidance/turtlebot_ddpg/launch/turtlebot3_empty_world.launch'
-	# 	uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-	# 	roslaunch.configure_logging(uuid)
-	# 	launch = roslaunch.parent.ROSLaunchParent(uuid, [launch_file])
-	# 	launch.start()
-	# 	rospy.loginfo("started")
-	# 	time.sleep(6)
-	# 	robot_range = rospy.get_param('/robot_info/num_robot')
-	# 	num_robots = random.randint(2, robot_range+1)
-	# 	num_targets = random.randint(1, num_robots)
-	# 	urdf = rospy.get_param('/robot_description')
-	# 	spawn_model_proxy = rospy.ServiceProxy('gazebo/spawn_sdf_model', SpawnModel)
-	# 	delete_model_proxy = rospy.ServiceProxy('gazebo/delete_model', DeleteModel)
-	# 	spawn_targets(num_targets, sdf, spawn_model_proxy)
-	# 	spawn_robots(num_robots, urdf, node, num_targets)
-
-	# 	# time.sleep(2)
-	# 	actor_critic_list = [ActorCritic(game_state_list[i], sess) for i in range(num_robots)]
-	# 	current_state_list = []
-	# 	for i in range(len(game_state_list)):
-	# 		current_state_list.append(game_state_list[i].reset())
-	# 	# time.sleep(2)
-
-	# 	# delete_models(num_targets, delete_model_proxy, model='target')
-	# 	# delete_models(num_robots, delete_model_proxy, model='robot')
-	# 	# node_process.terminate()
-	# 	launch.shutdown()
-	# 	node_process2 = Popen(shlex.split('rosnode kill /gazebo'))
-	# 	node_process2 = Popen(shlex.split('rosnode kill /gazebo_gui'))
 	########################################################
 	num_trials = 1000
-	trial_len  = 200
+	trial_len  = 2000
 	train_indicator = 0
 
 	#actor_critic.read_human_data()
@@ -623,86 +670,98 @@ def main():
 		
 
 	if train_indicator==0:
-		for i in range(num_trials):
-			print("trial:" + str(i))
+		try:
 			launch_file = '/home/rishabh/genesys3_ws/src/turtlebot3_ddpg_collision_avoidance/turtlebot_ddpg/launch/turtlebot3_empty_world.launch'
 			uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
 			roslaunch.configure_logging(uuid)
 			launch = roslaunch.parent.ROSLaunchParent(uuid, [launch_file])
 			launch.start()
 			rospy.loginfo("started")
-			time.sleep(16)
+			time.sleep(6)
 			robot_range = rospy.get_param('/robot_info/num_robot')
-			num_robots = random.randint(2, robot_range)
-			num_targets = random.randint(1, num_robots-1)
-			urdf = rospy.get_param('/robot_description')
 			spawn_model_proxy = rospy.ServiceProxy('gazebo/spawn_sdf_model', SpawnModel)
-			delete_model_proxy = rospy.ServiceProxy('gazebo/delete_model', DeleteModel)
-			spawn_targets(num_targets, sdf, spawn_model_proxy, obstacle_loc)
-			game_state_list, robot_node_process = spawn_robots(num_robots, urdf, node, num_targets)
+			set_model_state_proxy = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
+			urdf = rospy.get_param('/robot_description')
+			spawn_targets(robot_range-1, sdf, spawn_model_proxy, obstacle_loc)
+			game_state_list, robot_node_process = spawn_robots(robot_range, urdf, node, robot_range-1)
+			for i in range(num_trials):
+				print("trial:" + str(i))
+				time.sleep(8)
+				# delete_model_proxy = rospy.ServiceProxy('gazebo/delete_model', DeleteModel)
+				num_robots = random.randint(2, robot_range)
+				num_targets = random.randint(1, num_robots-1)
+				move_models_in(num_robots, obstacle_loc, set_model_state_proxy, model='robot')
+				move_models_in(num_targets, obstacle_loc, set_model_state_proxy, model='target')
+				move_models_out(num_robots, num_targets, robot_range, set_model_state_proxy)
+				time.sleep(2)
+				target_count = 0
+				for j in range(num_robots):
+					game_state_list[j].target_model = 'unit_sphere_test_' + str(target_count % num_targets)
+					target_count += 1
 
-			# time.sleep(2)
-			actor_critic_list = [ActorCritic(game_state_list[i], sess) for j in range(num_robots)]
-			current_state_list = []
-			for j in range(len(game_state_list)):
-				current_state_list.append(game_state_list[i].reset())
-			# time.sleep(2)
-			for j in range(num_robots):
-				current_state_list[j] = game_state_list[j].reset()
-			for j in range(num_robots):
-				# actor_critic.actor_model.load_weights("actormodel-160-500.h5")
-				# actor_critic.critic_model.load_weights("criticmodel-160-500.h5")
-				# actor_critic_list[j].actor_model.load_weights("actormodel-10-2000.h5")
-				# actor_critic_list[j].critic_model.load_weights("criticmodel-10-2000.h5")
-				actor_critic_list[j].actor_model.load_weights("/home/rishabh/Downloads/actormodel-500-2000.h5")
-				actor_critic_list[j].critic_model.load_weights("/home/rishabh/Downloads/criticmodel-500-2000.h5")
-			##############################################################################################
-			total_reward_list = [0 for j in range(num_robots)]
-			
-			for j in range(trial_len):
-				do_reset = True
-				for k in range(num_robots):
-					if not game_state_list[k].arrived and not game_state_list[k].crashed:
-						# Robot i
-						###########################################################################################
-						current_state_list[k] = current_state_list[k].reshape((1, game_state_list[k].observation_space.shape[0]))
-
-						start_time = time.time()
-						action = actor_critic_list[k].play(current_state_list[k])  # need to change the network input output, do I need to change the output to be [0, 2*pi]
-						action = action.reshape((1, game_state_list[k].action_space.shape[0]))
-						end_time = time.time()
-						print(1/(end_time - start_time), "fps for calculating step {} for robot {}".format(j, k))
-
-						reward, new_state, crashed_value = game_state_list[k].game_step(0.1, action[0][1], action[0][0]) # we get reward and state here, then we need to calculate if it is crashed! for 'dones' value
-						total_reward_list[k] = total_reward_list[k] + reward
-						###########################################################################################
-
-						if j == (trial_len - 1):
-							crashed_value = 1
-							print("this is reward:", total_reward_list[k])
-						
-						step += 1
-						step_reward = np.append(step_reward,[i+1, step,reward, tim])
-						sio.savemat('ddpg_per_' + str(tim) + '/iter{}_step_debug_robot{}_reward.mat'.format(i, k),{'data':step_reward},True,'5', False, False,'row')
-
-						new_state = new_state.reshape((1, game_state_list[k].observation_space.shape[0]))
-						# actor_critic.remember(cur_state, action, reward, new_state, done)   # remember all the data using memory, memory data will be samples to samples automatically.
-						# cur_state = new_state
-
-						##########################################################################################
-						#actor_critic.remember(current_state, action, reward, new_state, crashed_value)
-						current_state_list[k] = new_state
-
-						##########################################################################################
-
-					do_reset = do_reset & (game_state_list[k].arrived | game_state_list[k].crashed)
-				if do_reset:
+				print("Came here 1")
+				# time.sleep(2)
+				actor_critic_list = [ActorCritic(game_state_list[i], sess) for j in range(num_robots)]
+				current_state_list = []
+				for j in range(len(game_state_list)):
+					current_state_list.append(game_state_list[i].reset())
+				# time.sleep(2)
+				for j in range(num_robots):
+					current_state_list[j] = game_state_list[j].reset()
+				for j in range(num_robots):
+					# actor_critic.actor_model.load_weights("actormodel-160-500.h5")
+					# actor_critic.critic_model.load_weights("criticmodel-160-500.h5")
+					# actor_critic_list[j].actor_model.load_weights("actormodel-10-2000.h5")
+					# actor_critic_list[j].critic_model.load_weights("criticmodel-10-2000.h5")
+					actor_critic_list[j].actor_model.load_weights("/home/rishabh/Downloads/actormodel-500-2000.h5")
+					actor_critic_list[j].critic_model.load_weights("/home/rishabh/Downloads/criticmodel-500-2000.h5")
+				##############################################################################################
+				total_reward_list = [0 for j in range(num_robots)]
+				print("Came here 2")
+				for j in range(trial_len):
+					do_reset = True
 					for k in range(num_robots):
-						game_state_list[k].reset()
+						if not game_state_list[k].arrived and not game_state_list[k].crashed:
+							# Robot i
+							###########################################################################################
+							current_state_list[k] = current_state_list[k].reshape((1, game_state_list[k].observation_space.shape[0]))
 
-			# delete_models(num_targets, delete_model_proxy, model='target')
-			# delete_models(num_robots, delete_model_proxy, model='robot')
-			# node_process.terminate()
+							start_time = time.time()
+							action = actor_critic_list[k].play(current_state_list[k])  # need to change the network input output, do I need to change the output to be [0, 2*pi]
+							action = action.reshape((1, game_state_list[k].action_space.shape[0]))
+							end_time = time.time()
+							print(1/(end_time - start_time), "fps for calculating step {} for robot {}".format(j, k))
+
+							reward, new_state, crashed_value = game_state_list[k].game_step(0.1, action[0][1], action[0][0]) # we get reward and state here, then we need to calculate if it is crashed! for 'dones' value
+							total_reward_list[k] = total_reward_list[k] + reward
+							###########################################################################################
+
+							if j == (trial_len - 1):
+								crashed_value = 1
+								print("this is reward:", total_reward_list[k])
+							
+							step += 1
+							step_reward = np.append(step_reward,[i+1, step,reward, tim])
+							sio.savemat('ddpg_per_' + str(tim) + '/iter{}_step_debug_robot{}_reward.mat'.format(i, k),{'data':step_reward},True,'5', False, False,'row')
+
+							new_state = new_state.reshape((1, game_state_list[k].observation_space.shape[0]))
+							# actor_critic.remember(cur_state, action, reward, new_state, done)   # remember all the data using memory, memory data will be samples to samples automatically.
+							# cur_state = new_state
+
+							##########################################################################################
+							#actor_critic.remember(current_state, action, reward, new_state, crashed_value)
+							current_state_list[k] = new_state
+
+							##########################################################################################
+
+						do_reset = do_reset & (game_state_list[k].arrived | game_state_list[k].crashed)
+					if do_reset:
+						for k in range(num_robots):
+							game_state_list[k].reset()
+
+				# delete_models(num_targets, delete_model_proxy, model='target')
+				# delete_models(num_robots, delete_model_proxy, model='robot')
+				# node_process.terminate()
 			for i, npr in enumerate(robot_node_process):
 				robot_node_process[i].terminate()
 			launch.shutdown()
@@ -711,6 +770,12 @@ def main():
 			# node_process2.terminate
 			# node_process2 = Popen(shlex.split('rosnode kill /gazebo_gui'))
 			# node_process2.terminate()
+		except:
+			print("Error came")
+			# for i, npr in enumerate(robot_node_process):
+			# 	robot_node_process[i].terminate()
+			launch.shutdown()
+			node_process = Popen(shlex.split('killall -9 gzserver gzclient'))
 
 if __name__ == "__main__":
 	main()
