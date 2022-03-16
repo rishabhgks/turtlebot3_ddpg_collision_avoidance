@@ -74,7 +74,7 @@ $ roslaunch turtlebot_ddpg turtlebot3_empty_world.launch world_file:='/home/.../
 ```
 $ source ~/ddpg_env/bin/activate
 ```
-Terminal #1
+Terminal 1
 ```
 $ cd ~/catkin_ws 
 $ source devel/setup.bash
@@ -83,7 +83,7 @@ $ catkin_make
 $ roscore 
 ```
 
-Terminal #2
+Terminal 2
 ```
 $ export TURTLEBOT3_MODEL=waffle_pi
 $ rosrun turtlebot_ddpg ddpg_network_turtlebot3_amcl_fd_replay_human_dynamic.py
