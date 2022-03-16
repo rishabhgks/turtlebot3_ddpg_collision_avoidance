@@ -91,7 +91,7 @@ $ rosrun turtlebot_ddpg ddpg_network_turtlebot3_amcl_fd_replay_human_dynamic.py
 
 For train and play with ddpg with human data
 ```
-$ cd ~/catkin_ws/src/UGV_CA_ddpg/turtlebot_ddpg/scripts/fd_replay/play_human_data
+$ cd ~/catkin_ws/src/.../turtlebot_ddpg/scripts/fd_replay/play_human_data
 $ rosrun turtlebot_ddpg ddpg_network_turtlebot3_amcl_fd_replay_human.py
 ```
 For train and play with original ddpg
