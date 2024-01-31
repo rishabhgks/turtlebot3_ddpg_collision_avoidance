@@ -110,3 +110,26 @@ For playing trained weights
 ```
  please change train_indicator=0 under ddpg_network_turtlebot3_original_ddpg.py (DDPG) or ddpg_network_turtlebot3_amcl_fd_replay_human.py (DDPG-PER)
 ```
+
+
+
+
+# Paper
+If you use this code in your research, please cite our paper:
+
+
+```
+@ARTICLE{10100908,
+  author={Mohanti, Subhramoy and Roy, Debashri and Eisen, Mark and Cavalcanti, Dave and Chowdhury, Kaushik},
+  journal={IEEE Transactions on Mobile Computing}, 
+  title={L-NORM: Learning and Network Orchestration at the Edge for Robot Connectivity and Mobility in Factory Floor Environments}, 
+  year={2023},
+  volume={},
+  number={},
+  pages={1-16},
+  keywords={Robots;Robot sensing systems;Robot kinematics;Collision avoidance;Navigation;IEEE 802.11ax Standard;Uplink;Edge network;orchestration;robot navigation;reinforcement learning;multi-modal data},
+  doi={10.1109/TMC.2023.3266643}}
+```
+
+and also refer to the papers from:
+https://github.com/hanlinniu/turtlebot3_ddpg_collision_avoidance
